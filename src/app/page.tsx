@@ -48,11 +48,13 @@ export default function Home() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
 
   // Dados do banco
   const [documents, setDocuments] = useState<DocumentType[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [envError, setEnvError] = useState<string | null>(null);
 
   // Filtros e busca
   const [activeTab, setActiveTab] = useState<'TODOS' | 'ORCAMENTO' | 'RECIBO'>('TODOS');
@@ -74,14 +76,25 @@ export default function Home() {
   const loadData = useCallback(async () => {
     try {
       setIsLoading(true);
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
 
-      if (!user) {
-        router.push('/login');
+      // Verifica variáveis de ambiente
+      if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+        setEnvError('Variáveis de ambiente do Supabase não configuradas na Vercel.');
+        setIsLoading(false);
+        setAuthChecked(true);
         return;
       }
+
+      const supabase = createClient();
+      const { data: { user }, error: authErr } = await supabase.auth.getUser();
+
+      if (authErr || !user) {
+        router.replace('/login');
+        return;
+      }
+
       setCurrentUser(user);
+      setAuthChecked(true);
 
       const [profData, docsData, clientsData] = await Promise.all([
         getCurrentProfile(),
@@ -92,8 +105,10 @@ export default function Home() {
       setProfile(profData);
       setDocuments(docsData);
       setClients(clientsData);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Erro ao carregar dados:', err);
+      // Se falhou ao buscar usuário, tenta redirecionar para o login
+      router.replace('/login');
     } finally {
       setIsLoading(false);
     }
@@ -161,8 +176,31 @@ export default function Home() {
 
   const totalServicosQuitados = documents.filter((d) => d.status === 'PAGO').length;
 
+  // Tela de carregamento enquanto valida login
+  if (!authChecked && isLoading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 text-gray-500 gap-3">
+        <Loader2 className="w-8 h-8 animate-spin text-avi-green" />
+        <p className="text-xs font-medium">Carregando sistema...</p>
+      </div>
+    );
+  }
+
   return (
     <main className="max-w-md mx-auto min-h-screen px-4 py-5 md:max-w-4xl md:px-8">
+      {/* Alerta caso as variáveis da Vercel não estejam configuradas */}
+      {envError && (
+        <div className="flex items-center gap-2 p-4 mb-4 rounded-2xl bg-amber-50 text-amber-900 border border-amber-300 text-xs">
+          <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
+          <div>
+            <strong>Atenção:</strong> {envError}
+            <p className="text-[11px] text-amber-700 mt-0.5">
+              Acesse o projeto na Vercel &gt; Settings &gt; Environment Variables e adicione as 3 chaves do Supabase.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Topo Institucional AVI & Usuário */}
       <header className="flex items-center justify-between border-b border-gray-200 pb-4 mb-5">
         <div>
