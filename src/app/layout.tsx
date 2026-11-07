@@ -5,6 +5,10 @@ export const metadata: Metadata = {
   title: 'AVI Alumínios e Vidros — Orçamentos e Recibos',
   description: 'Sistema ágil de orçamentos, recibos e gestão para vidraçaria e esquadrias',
   manifest: '/manifest.json',
+  icons: {
+    icon: '/logo-avi.jpg',
+    apple: '/logo-avi.jpg',
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
@@ -28,7 +32,8 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <head>
-        <link rel="apple-touch-icon" href="/icon-192.png" />
+        <link rel="icon" href="/logo-avi.jpg" />
+        <link rel="apple-touch-icon" href="/logo-avi.jpg" />
       </head>
       <body className="antialiased min-h-screen bg-gray-50 text-gray-900 pb-20 md:pb-0">
         {children}
