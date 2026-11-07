@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Client } from '@/types/database';
-import { Building, Plus, Check, ChevronDown, UserPlus } from 'lucide-react';
+import { Building, Plus, Check, UserPlus } from 'lucide-react';
 import { ClientModal } from './ClientModal';
 
 interface ClientAutocompleteProps {
@@ -50,7 +50,7 @@ export const ClientAutocomplete: React.FC<ClientAutocompleteProps> = ({
   };
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className="relative min-w-0" ref={dropdownRef}>
       <label className="block text-xs font-semibold text-gray-700 mb-1">
         Cliente Contratante <span className="text-red-500">*</span>
       </label>
@@ -70,7 +70,7 @@ export const ClientAutocomplete: React.FC<ClientAutocompleteProps> = ({
             setIsOpen(true);
           }}
           placeholder="Digite para buscar ou cadastrar..."
-          className="w-full pl-9 pr-20 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-avi-green focus:bg-white transition-all"
+          className="w-full min-w-0 pl-9 pr-20 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-avi-green focus:bg-white transition-all"
         />
 
         <div className="absolute inset-y-0 right-0 pr-2 flex items-center gap-1">
@@ -97,15 +97,15 @@ export const ClientAutocomplete: React.FC<ClientAutocompleteProps> = ({
                 onClick={() => handleSelect(client)}
                 className="w-full flex items-center justify-between px-4 py-2.5 text-left text-sm hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-b-0"
               >
-                <div>
-                  <p className="font-semibold text-gray-800 text-xs">{client.name}</p>
-                  <p className="text-[11px] text-gray-400">
+                <div className="min-w-0 pr-2">
+                  <p className="font-semibold text-gray-800 text-xs truncate">{client.name}</p>
+                  <p className="text-[11px] text-gray-400 truncate">
                     {client.phone ? client.phone : ''}
                     {client.default_location ? ` • ${client.default_location}` : ''}
                   </p>
                 </div>
                 {selectedClient?.id === client.id && (
-                  <Check className="w-4 h-4 text-avi-green" />
+                  <Check className="w-4 h-4 text-avi-green shrink-0" />
                 )}
               </button>
             ))
@@ -115,7 +115,7 @@ export const ClientAutocomplete: React.FC<ClientAutocompleteProps> = ({
               <button
                 type="button"
                 onClick={() => setIsClientModalOpen(true)}
-                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-white bg-avi-green rounded-lg hover:bg-avi-green-light"
+                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-white bg-avi-green rounded-lg hover:bg-avi-green-light transition-all active:scale-95"
               >
                 <UserPlus className="w-3.5 h-3.5" />
                 <span>Cadastrar "{search}"</span>
@@ -125,9 +125,10 @@ export const ClientAutocomplete: React.FC<ClientAutocompleteProps> = ({
         </div>
       )}
 
-      {/* Modal de Cadastro de Cliente */}
+      {/* Modal de Cadastro de Cliente com initialName preenchido */}
       <ClientModal
         isOpen={isClientModalOpen}
+        initialName={search}
         onClose={() => setIsClientModalOpen(false)}
         onSaved={(newClient) => {
           onClientCreated(newClient);

@@ -10,20 +10,15 @@ import {
   Users, 
   Clock, 
   Eye, 
-  Plus, 
   Search, 
-  Filter, 
   FileSpreadsheet, 
   ArrowRightLeft, 
   Edit3, 
   Trash2, 
   LogOut, 
-  Share2, 
-  CheckCircle2, 
   AlertCircle,
   Loader2,
-  Building,
-  UserPlus
+  ChevronRight
 } from 'lucide-react';
 import { Document as DocumentType, Client, Profile } from '@/types/database';
 import { getDocuments, deleteDocumentRecord } from '@/lib/services/documents';
@@ -37,6 +32,7 @@ import { OrcamentoModal } from '@/components/documents/OrcamentoModal';
 import { ReciboModal } from '@/components/documents/ReciboModal';
 import { ConvertModal } from '@/components/documents/ConvertModal';
 import { ClientModal } from '@/components/clients/ClientModal';
+import { ClientsManagerModal } from '@/components/clients/ClientsManagerModal';
 
 // Modal de PDF dinâmico para evitar SSR
 const PDFPreviewModal = dynamic(
@@ -65,6 +61,7 @@ export default function Home() {
   const [isReciboModalOpen, setIsReciboModalOpen] = useState(false);
   const [isConvertModalOpen, setIsConvertModalOpen] = useState(false);
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
+  const [isClientsManagerOpen, setIsClientsManagerOpen] = useState(false);
   const [isPDFModalOpen, setIsPDFModalOpen] = useState(false);
 
   // Itens selecionados para edição / conversão / preview
@@ -107,7 +104,6 @@ export default function Home() {
       setClients(clientsData);
     } catch (err: any) {
       console.error('Erro ao carregar dados:', err);
-      // Se falhou ao buscar usuário, tenta redirecionar para o login
       router.replace('/login');
     } finally {
       setIsLoading(false);
@@ -187,7 +183,7 @@ export default function Home() {
   }
 
   return (
-    <main className="max-w-md mx-auto min-h-screen px-4 py-5 md:max-w-4xl md:px-8">
+    <main className="max-w-md mx-auto min-h-screen px-3 sm:px-4 py-5 md:max-w-4xl md:px-8 overflow-x-hidden">
       {/* Alerta caso as variáveis da Vercel não estejam configuradas */}
       {envError && (
         <div className="flex items-center gap-2 p-4 mb-4 rounded-2xl bg-amber-50 text-amber-900 border border-amber-300 text-xs">
@@ -215,15 +211,15 @@ export default function Home() {
           </p>
         </div>
 
-        {/* Botão de Logout & Status */}
+        {/* Botão de Clientes & Logout */}
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setIsClientModalOpen(true)}
-            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-avi-green bg-emerald-50 hover:bg-emerald-100 transition-colors"
+            onClick={() => setIsClientsManagerOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-avi-green bg-emerald-50 hover:bg-emerald-100 transition-colors shadow-sm"
           >
-            <UserPlus className="w-3.5 h-3.5" />
-            <span>+ Cliente</span>
+            <Users className="w-3.5 h-3.5" />
+            <span>Clientes ({clients.length})</span>
           </button>
 
           <button
@@ -311,21 +307,29 @@ export default function Home() {
             <p className="text-[11px] text-gray-400 mt-1">Propostas pendentes</p>
           </div>
 
-          <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm">
+          {/* Card Interativo de Clientes */}
+          <button
+            type="button"
+            onClick={() => setIsClientsManagerOpen(true)}
+            className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm hover:border-blue-300 hover:shadow-md transition-all text-left group"
+          >
             <div className="flex items-center justify-between text-gray-500 text-xs mb-1">
-              <span>Clientes</span>
-              <Users className="w-3.5 h-3.5 text-blue-500" />
+              <span className="group-hover:text-blue-600 font-medium transition-colors">Clientes</span>
+              <Users className="w-3.5 h-3.5 text-blue-500 group-hover:scale-110 transition-transform" />
             </div>
-            <div className="text-xl font-bold text-gray-900">
-              {clients.length}
+            <div className="flex items-center justify-between">
+              <span className="text-xl font-bold text-gray-900 group-hover:text-blue-700 transition-colors">
+                {clients.length}
+              </span>
+              <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-blue-500 group-hover:translate-x-0.5 transition-all" />
             </div>
-            <p className="text-[11px] text-gray-400 mt-1">Cadastrados no sistema</p>
-          </div>
+            <p className="text-[11px] text-blue-600/80 font-medium mt-1">Ver lista e gerenciar</p>
+          </button>
         </div>
       </section>
 
       {/* Histórico e Gestão de Documentos */}
-      <section className="bg-white rounded-3xl border border-gray-200 p-5 shadow-sm space-y-4">
+      <section className="bg-white rounded-3xl border border-gray-200 p-4 sm:p-5 shadow-sm space-y-4">
         {/* Barra de Filtro e Busca */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
           {/* Abas */}
@@ -404,10 +408,10 @@ export default function Home() {
               return (
                 <div
                   key={doc.id}
-                  className="p-4 rounded-2xl border border-gray-100 hover:border-gray-200 hover:bg-gray-50/70 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  className="p-3.5 sm:p-4 rounded-2xl border border-gray-100 hover:border-gray-200 hover:bg-gray-50/70 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                 >
                   {/* Lado Esquerdo: Identificação & Detalhes */}
-                  <div className="flex items-start gap-3">
+                  <div className="flex items-start gap-3 min-w-0">
                     <div
                       className={`h-10 w-10 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
                         isOrcamento
@@ -418,15 +422,15 @@ export default function Home() {
                       {isOrcamento ? 'ORC' : 'REC'}
                     </div>
 
-                    <div className="space-y-1">
+                    <div className="space-y-1 min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-bold text-sm text-gray-900">
+                        <span className="font-bold text-sm text-gray-900 truncate">
                           {doc.client?.name || 'Cliente'}
                         </span>
 
                         {/* Status Badge */}
                         <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${
                             doc.status === 'PAGO'
                               ? 'bg-emerald-100 text-emerald-800'
                               : doc.status === 'APROVADO'
@@ -440,12 +444,12 @@ export default function Home() {
                           {doc.payment_method ? ` (${doc.payment_method})` : ''}
                         </span>
 
-                        <span className="text-[11px] font-semibold text-gray-400">
+                        <span className="text-[11px] font-semibold text-gray-400 shrink-0">
                           {doc.code}
                         </span>
                       </div>
 
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-gray-500 truncate">
                         {doc.items && doc.items.length > 0
                           ? doc.items[0].title
                           : doc.notes || 'Sem descrição'}
@@ -459,7 +463,7 @@ export default function Home() {
                   </div>
 
                   {/* Lado Direito: Valor & Ações */}
-                  <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100">
+                  <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100 shrink-0">
                     <div className="text-left sm:text-right">
                       <span className="block font-bold text-sm text-gray-900">
                         {formatCurrency(doc.total_amount)}
@@ -563,14 +567,23 @@ export default function Home() {
         onConverted={handleConverted}
       />
 
-      {/* 4. Modal Avulso de Cliente */}
+      {/* 4. Modal Avulso de Cliente (Cadastro Rápido) */}
       <ClientModal
         isOpen={isClientModalOpen}
         onClose={() => setIsClientModalOpen(false)}
         onSaved={(c) => setClients((prev) => [...prev, c])}
       />
 
-      {/* 5. Modal de Visualização & WhatsApp do PDF */}
+      {/* 5. Modal de Gerenciamento Completo de Clientes */}
+      <ClientsManagerModal
+        isOpen={isClientsManagerOpen}
+        onClose={() => setIsClientsManagerOpen(false)}
+        clients={clients}
+        documents={documents}
+        onClientsChanged={loadData}
+      />
+
+      {/* 6. Modal de Visualização & WhatsApp do PDF */}
       {selectedPDFDoc && (
         <PDFPreviewModal
           isOpen={isPDFModalOpen}

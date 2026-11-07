@@ -10,6 +10,7 @@ interface ClientModalProps {
   onClose: () => void;
   onSaved: (client: Client) => void;
   clientToEdit?: Client | null;
+  initialName?: string;
 }
 
 export const ClientModal: React.FC<ClientModalProps> = ({
@@ -17,6 +18,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({
   onClose,
   onSaved,
   clientToEdit,
+  initialName = '',
 }) => {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -32,13 +34,13 @@ export const ClientModal: React.FC<ClientModalProps> = ({
       setTaxId(clientToEdit.tax_id || '');
       setDefaultLocation(clientToEdit.default_location || '');
     } else {
-      setName('');
+      setName(initialName || '');
       setPhone('');
       setTaxId('');
       setDefaultLocation('');
     }
     setError(null);
-  }, [clientToEdit, isOpen]);
+  }, [clientToEdit, isOpen, initialName]);
 
   if (!isOpen) return null;
 
@@ -82,12 +84,12 @@ export const ClientModal: React.FC<ClientModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-x-hidden">
+      <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         <div className="flex items-center justify-between px-5 py-4 bg-avi-green text-white">
           <div className="flex items-center gap-2">
-            <UserPlus className="w-5 h-5" />
-            <h3 className="font-semibold text-sm">
+            <UserPlus className="w-5 h-5 text-emerald-300" />
+            <h3 className="font-bold text-sm">
               {clientToEdit ? 'Editar Cliente' : 'Novo Cliente'}
             </h3>
           </div>
@@ -120,7 +122,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Ex: Imobiliária Prizma ou João Silva"
-                className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-avi-green focus:bg-white"
+                className="w-full min-w-0 pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-avi-green focus:bg-white"
               />
             </div>
           </div>
@@ -138,7 +140,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="(47) 99659-4199"
-                className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-avi-green focus:bg-white"
+                className="w-full min-w-0 pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-avi-green focus:bg-white"
               />
             </div>
           </div>
@@ -157,7 +159,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({
                   value={taxId}
                   onChange={(e) => setTaxId(e.target.value)}
                   placeholder="20.132.177/0001-59"
-                  className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-avi-green focus:bg-white"
+                  className="w-full min-w-0 pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-avi-green focus:bg-white"
                 />
               </div>
             </div>
@@ -175,7 +177,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({
                   value={defaultLocation}
                   onChange={(e) => setDefaultLocation(e.target.value)}
                   placeholder="Ex: Res. Waldgarten"
-                  className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-avi-green focus:bg-white"
+                  className="w-full min-w-0 pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-avi-green focus:bg-white"
                 />
               </div>
             </div>
@@ -185,14 +187,14 @@ export const ClientModal: React.FC<ClientModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded-xl"
+              className="px-4 py-2 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded-xl transition-colors"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={isLoading}
-              className="flex items-center gap-1.5 px-5 py-2 text-xs font-semibold text-white bg-avi-green hover:bg-avi-green-light active:scale-95 rounded-xl shadow-sm transition-all"
+              className="flex items-center gap-1.5 px-5 py-2.5 text-xs font-bold text-white bg-avi-green hover:bg-avi-green-light active:scale-95 rounded-xl shadow-sm transition-all"
             >
               {isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               <span>{clientToEdit ? 'Salvar Alterações' : 'Cadastrar Cliente'}</span>

@@ -79,3 +79,19 @@ export async function updateClientRecord(
 
   return data as Client;
 }
+
+export async function deleteClientRecord(id: string): Promise<boolean> {
+  const supabase = createClient();
+  const { error } = await supabase.from('clients').delete().eq('id', id);
+
+  if (error) {
+    if (error.code === '23503') {
+      throw new Error(
+        'Este cliente possui orçamentos ou recibos cadastrados e não pode ser excluído para não quebrar o histórico.'
+      );
+    }
+    throw new Error(error.message);
+  }
+
+  return true;
+}
