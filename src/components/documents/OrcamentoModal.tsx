@@ -25,6 +25,7 @@ interface OrcamentoModalProps {
   clients: Client[];
   onClientCreated: (client: Client) => void;
   documentToEdit?: DocumentType | null;
+  initialClient?: Client | null;
 }
 
 export const OrcamentoModal: React.FC<OrcamentoModalProps> = ({
@@ -34,6 +35,7 @@ export const OrcamentoModal: React.FC<OrcamentoModalProps> = ({
   clients,
   onClientCreated,
   documentToEdit,
+  initialClient,
 }) => {
   const [code, setCode] = useState('');
   const [issueDate, setIssueDate] = useState(new Date().toISOString().split('T')[0]);
@@ -91,8 +93,8 @@ export const OrcamentoModal: React.FC<OrcamentoModalProps> = ({
     } else {
       getNextCode('ORCAMENTO').then((nextCode) => setCode(nextCode));
       setIssueDate(new Date().toISOString().split('T')[0]);
-      setSelectedClient(null);
-      setLocation('');
+      setSelectedClient(initialClient || null);
+      setLocation(initialClient?.default_location || '');
       setNotes(
         'Observação: Este documento apresenta os valores referentes aos serviços e à composição de material e mão de obra descritos acima.'
       );
@@ -108,7 +110,7 @@ export const OrcamentoModal: React.FC<OrcamentoModalProps> = ({
       ]);
     }
     setError(null);
-  }, [isOpen, documentToEdit]);
+  }, [isOpen, documentToEdit, initialClient]);
 
   if (!isOpen) return null;
 

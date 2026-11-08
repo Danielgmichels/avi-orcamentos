@@ -24,6 +24,7 @@ interface ReciboModalProps {
   onClientCreated: (client: Client) => void;
   documentToEdit?: DocumentType | null;
   defaultPixKey?: string;
+  initialClient?: Client | null;
 }
 
 export const ReciboModal: React.FC<ReciboModalProps> = ({
@@ -34,6 +35,7 @@ export const ReciboModal: React.FC<ReciboModalProps> = ({
   onClientCreated,
   documentToEdit,
   defaultPixKey = '47 99659-4199',
+  initialClient,
 }) => {
   const [code, setCode] = useState('');
   const [issueDate, setIssueDate] = useState(new Date().toISOString().split('T')[0]);
@@ -69,8 +71,8 @@ export const ReciboModal: React.FC<ReciboModalProps> = ({
     } else {
       getNextCode('RECIBO').then((nextCode) => setCode(nextCode));
       setIssueDate(new Date().toISOString().split('T')[0]);
-      setSelectedClient(null);
-      setLocation('');
+      setSelectedClient(initialClient || null);
+      setLocation(initialClient?.default_location || '');
       setServiceDescription('');
       setTotalAmount('');
       setPaymentMethod('PIX');
@@ -78,7 +80,7 @@ export const ReciboModal: React.FC<ReciboModalProps> = ({
       setStatus('PAGO');
     }
     setError(null);
-  }, [isOpen, documentToEdit, defaultPixKey]);
+  }, [isOpen, documentToEdit, defaultPixKey, initialClient]);
 
   if (!isOpen) return null;
 

@@ -25,17 +25,18 @@ import {
 } from 'lucide-react';
 import { Document as DocumentType, Client, Profile } from '@/types/database';
 import { getDocuments, deleteDocumentRecord } from '@/lib/services/documents';
-import { getClients } from '@/lib/services/clients';
+import { getClients, deleteClientRecord } from '@/lib/services/clients';
 import { getCurrentProfile } from '@/lib/services/profile';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 import { exportDocumentsToExcel } from '@/utils/exportExcel';
 
-// Modais importados
+// Componentes e Modais
 import { OrcamentoModal } from '@/components/documents/OrcamentoModal';
 import { ReciboModal } from '@/components/documents/ReciboModal';
 import { ConvertModal } from '@/components/documents/ConvertModal';
 import { ClientModal } from '@/components/clients/ClientModal';
-import { ClientsManagerModal } from '@/components/clients/ClientsManagerModal';
+import { ClientsManagerView } from '@/components/clients/ClientsManagerView';
+import { ClientDetailModal } from '@/components/clients/ClientDetailModal';
 
 // Modal de PDF dinâmico para evitar SSR
 const PDFPreviewModal = dynamic(
@@ -55,7 +56,10 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
   const [envError, setEnvError] = useState<string | null>(null);
 
-  // Filtros e busca
+  // Visualização principal (Documentos vs Clientes)
+  const [mainView, setMainView] = useState<'DOCUMENTOS' | 'CLIENTES'>('DOCUMENTOS');
+
+  // Filtros e busca de documentos
   const [activeTab, setActiveTab] = useState<'TODOS' | 'ORCAMENTO' | 'RECIBO'>('TODOS');
   const [statusFilter, setStatusFilter] = useState<'TODOS' | 'PAGO' | 'APROVADO' | 'PENDENTE'>('TODOS');
   const [searchTerm, setSearchTerm] = useState('');
@@ -65,13 +69,16 @@ export default function Home() {
   const [isReciboModalOpen, setIsReciboModalOpen] = useState(false);
   const [isConvertModalOpen, setIsConvertModalOpen] = useState(false);
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
-  const [isClientsManagerOpen, setIsClientsManagerOpen] = useState(false);
+  const [isClientDetailModalOpen, setIsClientDetailModalOpen] = useState(false);
   const [isPDFModalOpen, setIsPDFModalOpen] = useState(false);
 
   // Itens selecionados para edição / conversão / preview
   const [docToEdit, setDocToEdit] = useState<DocumentType | null>(null);
   const [docToConvert, setDocToConvert] = useState<DocumentType | null>(null);
   const [selectedPDFDoc, setSelectedPDFDoc] = useState<DocumentType | null>(null);
+  const [selectedDetailClient, setSelectedDetailClient] = useState<Client | null>(null);
+  const [clientToEdit, setClientToEdit] = useState<Client | null>(null);
+  const [clientForNewDoc, setClientForNewDoc] = useState<Client | null>(null);
 
   // Carrega dados do usuário e banco
   const loadData = useCallback(async () => {
@@ -153,6 +160,57 @@ export default function Home() {
     setIsPDFModalOpen(true);
   };
 
+  // Operações de Clientes (Hub / CRM)
+  const handleOpenClientDetail = (client: Client) => {
+    setSelectedDetailClient(client);
+    setIsClientDetailModalOpen(true);
+  };
+
+  const handleNewClient = () => {
+    setClientToEdit(null);
+    setIsClientModalOpen(true);
+  };
+
+  const handleEditClient = (client: Client) => {
+    setClientToEdit(client);
+    setIsClientModalOpen(true);
+  };
+
+  const handleDeleteClient = async (client: Client) => {
+    const docCount = documents.filter((d) => d.client_id === client.id).length;
+    if (docCount > 0) {
+      alert(
+        `O cliente "${client.name}" possui ${docCount} documento(s) cadastrado(s) e não pode ser excluído para não apagar o histórico de serviços.`
+      );
+      return;
+    }
+
+    if (confirm(`Deseja realmente excluir o cliente "${client.name}"?`)) {
+      try {
+        await deleteClientRecord(client.id);
+        if (selectedDetailClient?.id === client.id) {
+          setIsClientDetailModalOpen(false);
+          setSelectedDetailClient(null);
+        }
+        await loadData();
+      } catch (err: any) {
+        alert('Erro ao excluir cliente: ' + err.message);
+      }
+    }
+  };
+
+  const handleNewOrcamentoForClient = (client: Client) => {
+    setClientForNewDoc(client);
+    setDocToEdit(null);
+    setIsOrcamentoModalOpen(true);
+  };
+
+  const handleNewReciboForClient = (client: Client) => {
+    setClientForNewDoc(client);
+    setDocToEdit(null);
+    setIsReciboModalOpen(true);
+  };
+
   // Alternar filtro rápido por status (clicar no card)
   const handleToggleStatusFilter = (status: 'PAGO' | 'APROVADO' | 'PENDENTE') => {
     setStatusFilter((prev) => (prev === status ? 'TODOS' : status));
@@ -223,8 +281,12 @@ export default function Home() {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setIsClientsManagerOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-avi-green bg-emerald-50 hover:bg-emerald-100 transition-colors shadow-sm"
+            onClick={() => setMainView('CLIENTES')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors shadow-sm ${
+              mainView === 'CLIENTES'
+                ? 'text-white bg-avi-green'
+                : 'text-avi-green bg-emerald-50 hover:bg-emerald-100'
+            }`}
           >
             <Users className="w-3.5 h-3.5" />
             <span>Clientes ({clients.length})</span>
@@ -274,8 +336,50 @@ export default function Home() {
         </button>
       </section>
 
-      {/* Cards de Métricas Reais do Banco - Proposta 1 (3 cards interativos) */}
-      <section className="mb-5">
+      {/* Alternador Principal de Visualização: Documentos vs Clientes */}
+      <div className="flex items-center bg-gray-100 p-1.5 rounded-2xl mb-5 shadow-inner">
+        <button
+          type="button"
+          onClick={() => setMainView('DOCUMENTOS')}
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all ${
+            mainView === 'DOCUMENTOS'
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-500 hover:text-gray-900'
+          }`}
+        >
+          <FileText className="w-4 h-4 text-avi-green" />
+          <span>Documentos ({documents.length})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setMainView('CLIENTES')}
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all ${
+            mainView === 'CLIENTES'
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-500 hover:text-gray-900'
+          }`}
+        >
+          <Users className="w-4 h-4 text-blue-600" />
+          <span>Clientes ({clients.length})</span>
+        </button>
+      </div>
+
+      {/* Visão de Clientes vs Visão de Documentos */}
+      {mainView === 'CLIENTES' ? (
+        <ClientsManagerView
+          clients={clients}
+          documents={documents}
+          onOpenClientDetail={handleOpenClientDetail}
+          onNewClient={handleNewClient}
+          onEditClient={handleEditClient}
+          onDeleteClient={handleDeleteClient}
+          onNewOrcamento={handleNewOrcamentoForClient}
+        />
+      ) : (
+        <>
+          {/* Cards de Métricas Reais do Banco - Proposta 1 (3 cards interativos) */}
+          <section className="mb-5">
         <div className="flex items-center justify-between mb-2.5">
           <div className="flex items-center gap-2">
             <h2 className="text-xs font-bold text-gray-600 uppercase tracking-wider">
@@ -639,28 +743,38 @@ export default function Home() {
           </div>
         )}
       </section>
+        </>
+      )}
 
       {/* MODAIS DO SISTEMA */}
 
       {/* 1. Modal de Orçamento */}
       <OrcamentoModal
         isOpen={isOrcamentoModalOpen}
-        onClose={() => setIsOrcamentoModalOpen(false)}
+        onClose={() => {
+          setIsOrcamentoModalOpen(false);
+          setClientForNewDoc(null);
+        }}
         onSaved={handleDocumentSaved}
         clients={clients}
         onClientCreated={(c) => setClients((prev) => [...prev, c])}
         documentToEdit={docToEdit?.document_type === 'ORCAMENTO' ? docToEdit : null}
+        initialClient={clientForNewDoc}
       />
 
       {/* 2. Modal de Recibo */}
       <ReciboModal
         isOpen={isReciboModalOpen}
-        onClose={() => setIsReciboModalOpen(false)}
+        onClose={() => {
+          setIsReciboModalOpen(false);
+          setClientForNewDoc(null);
+        }}
         onSaved={handleDocumentSaved}
         clients={clients}
         onClientCreated={(c) => setClients((prev) => [...prev, c])}
         documentToEdit={docToEdit?.document_type === 'RECIBO' ? docToEdit : null}
         defaultPixKey={profile?.pix_key || '47 99659-4199'}
+        initialClient={clientForNewDoc}
       />
 
       {/* 3. Modal de Conversão 1-Clique */}
@@ -671,20 +785,52 @@ export default function Home() {
         onConverted={handleConverted}
       />
 
-      {/* 4. Modal Avulso de Cliente (Cadastro Rápido) */}
+      {/* 4. Modal de Cadastro / Edição de Cliente */}
       <ClientModal
         isOpen={isClientModalOpen}
-        onClose={() => setIsClientModalOpen(false)}
-        onSaved={(c) => setClients((prev) => [...prev, c])}
+        onClose={() => {
+          setIsClientModalOpen(false);
+          setClientToEdit(null);
+        }}
+        clientToEdit={clientToEdit}
+        onSaved={() => {
+          loadData();
+          setIsClientModalOpen(false);
+          setClientToEdit(null);
+        }}
       />
 
-      {/* 5. Modal de Gerenciamento Completo de Clientes */}
-      <ClientsManagerModal
-        isOpen={isClientsManagerOpen}
-        onClose={() => setIsClientsManagerOpen(false)}
-        clients={clients}
+      {/* 5. Modal de Detalhes 360° do Cliente */}
+      <ClientDetailModal
+        isOpen={isClientDetailModalOpen}
+        onClose={() => {
+          setIsClientDetailModalOpen(false);
+          setSelectedDetailClient(null);
+        }}
+        client={clients.find((c) => c.id === selectedDetailClient?.id) || selectedDetailClient}
         documents={documents}
-        onClientsChanged={loadData}
+        profile={profile}
+        onEditClient={handleEditClient}
+        onDeleteClient={handleDeleteClient}
+        onNewOrcamento={handleNewOrcamentoForClient}
+        onNewRecibo={handleNewReciboForClient}
+        onOpenPDF={(doc) => {
+          setSelectedPDFDoc(doc);
+          setIsPDFModalOpen(true);
+        }}
+        onEditDoc={(doc) => {
+          setDocToEdit(doc);
+          if (doc.document_type === 'ORCAMENTO') {
+            setIsOrcamentoModalOpen(true);
+          } else {
+            setIsReciboModalOpen(true);
+          }
+        }}
+        onConvertDoc={(doc) => {
+          setDocToConvert(doc);
+          setIsConvertModalOpen(true);
+        }}
+        onDeleteDoc={handleDeleteDoc}
       />
 
       {/* 6. Modal de Visualização & WhatsApp do PDF */}
