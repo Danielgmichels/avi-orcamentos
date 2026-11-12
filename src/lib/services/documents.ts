@@ -253,6 +253,36 @@ export async function deleteDocumentRecord(id: string): Promise<boolean> {
 }
 
 /**
+ * Aprova rapidamente um orçamento (muda status de PENDENTE para APROVADO)
+ */
+export async function approveOrcamentoRecord(id: string): Promise<DocumentType> {
+  const supabase = createClient();
+
+  const { data: doc, error } = await supabase
+    .from('documents')
+    .update({
+      status: 'APROVADO',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select(`
+      *,
+      client:clients(*),
+      items:document_items(*)
+    `)
+    .single();
+
+  if (error || !doc) {
+    throw new Error(error?.message || 'Falha ao aprovar orçamento');
+  }
+
+  return {
+    ...doc,
+    items: (doc.items || []).sort((a: any, b: any) => a.order_index - b.order_index),
+  } as DocumentType;
+}
+
+/**
  * PULO DO GATO: Converte um Orçamento existente em Recibo de quitação em 1 clique
  */
 export async function convertOrcamentoToRecibo(

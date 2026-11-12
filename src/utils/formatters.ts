@@ -45,3 +45,14 @@ export function formatPhone(phone: string | null | undefined): string {
   }
   return phone;
 }
+
+/**
+ * Gera URL direta do WhatsApp (wa.me) com DDI 55 e mensagem opcional
+ */
+export function getWhatsAppUrl(phone: string | null | undefined, message?: string): string | null {
+  if (!phone) return null;
+  const digits = phone.replace(/\D/g, '');
+  if (!digits) return null;
+  const waNumber = digits.startsWith('55') ? digits : `55${digits}`;
+  return `https://wa.me/${waNumber}${message ? `?text=${encodeURIComponent(message)}` : ''}`;
+}

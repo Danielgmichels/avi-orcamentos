@@ -9,34 +9,35 @@ import {
   Receipt, 
   Users, 
   Clock, 
-  Eye, 
   Search, 
   FileSpreadsheet, 
-  ArrowRightLeft, 
-  Edit3, 
-  Trash2, 
   LogOut, 
   AlertCircle,
   Loader2,
-  ChevronRight,
   CheckCircle2,
   FileCheck,
   X
 } from 'lucide-react';
 import { Document as DocumentType, Client, Profile } from '@/types/database';
-import { getDocuments, deleteDocumentRecord } from '@/lib/services/documents';
+import {
+  getDocuments,
+  deleteDocumentRecord,
+  approveOrcamentoRecord,
+} from '@/lib/services/documents';
 import { getClients, deleteClientRecord } from '@/lib/services/clients';
 import { getCurrentProfile } from '@/lib/services/profile';
-import { formatCurrency, formatDate } from '@/utils/formatters';
+import { formatCurrency } from '@/utils/formatters';
+import { calculateFinancialSummary, hasLinkedPaidReceipt } from '@/utils/documentStats';
 import { exportDocumentsToExcel } from '@/utils/exportExcel';
 
 // Componentes e Modais
 import { OrcamentoModal } from '@/components/documents/OrcamentoModal';
 import { ReciboModal } from '@/components/documents/ReciboModal';
 import { ConvertModal } from '@/components/documents/ConvertModal';
+import { DocumentCard } from '@/components/documents/DocumentCard';
 import { ClientModal } from '@/components/clients/ClientModal';
 import { ClientsManagerView } from '@/components/clients/ClientsManagerView';
-import { ClientDetailModal } from '@/components/clients/ClientDetailModal';
+import { ClientDetailView } from '@/components/clients/ClientDetailView';
 
 // Modal de PDF dinâmico para evitar SSR
 const PDFPreviewModal = dynamic(
@@ -58,6 +59,7 @@ export default function Home() {
 
   // Visualização principal (Documentos vs Clientes)
   const [mainView, setMainView] = useState<'DOCUMENTOS' | 'CLIENTES'>('DOCUMENTOS');
+  const [selectedDetailClientId, setSelectedDetailClientId] = useState<string | null>(null);
 
   // Filtros e busca de documentos
   const [activeTab, setActiveTab] = useState<'TODOS' | 'ORCAMENTO' | 'RECIBO'>('TODOS');
@@ -69,16 +71,15 @@ export default function Home() {
   const [isReciboModalOpen, setIsReciboModalOpen] = useState(false);
   const [isConvertModalOpen, setIsConvertModalOpen] = useState(false);
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
-  const [isClientDetailModalOpen, setIsClientDetailModalOpen] = useState(false);
   const [isPDFModalOpen, setIsPDFModalOpen] = useState(false);
 
   // Itens selecionados para edição / conversão / preview
   const [docToEdit, setDocToEdit] = useState<DocumentType | null>(null);
   const [docToConvert, setDocToConvert] = useState<DocumentType | null>(null);
   const [selectedPDFDoc, setSelectedPDFDoc] = useState<DocumentType | null>(null);
-  const [selectedDetailClient, setSelectedDetailClient] = useState<Client | null>(null);
   const [clientToEdit, setClientToEdit] = useState<Client | null>(null);
   const [clientForNewDoc, setClientForNewDoc] = useState<Client | null>(null);
+  const [approvingDocId, setApprovingDocId] = useState<string | null>(null);
 
   // Carrega dados do usuário e banco
   const loadData = useCallback(async () => {
@@ -160,10 +161,22 @@ export default function Home() {
     setIsPDFModalOpen(true);
   };
 
+  // Aprovar orçamento em 1 clique
+  const handleApproveDoc = async (doc: DocumentType) => {
+    try {
+      setApprovingDocId(doc.id);
+      const updated = await approveOrcamentoRecord(doc.id);
+      setDocuments((prev) => prev.map((d) => (d.id === doc.id ? updated : d)));
+    } catch (err: any) {
+      alert('Erro ao aprovar orçamento: ' + err.message);
+    } finally {
+      setApprovingDocId(null);
+    }
+  };
+
   // Operações de Clientes (Hub / CRM)
   const handleOpenClientDetail = (client: Client) => {
-    setSelectedDetailClient(client);
-    setIsClientDetailModalOpen(true);
+    setSelectedDetailClientId(client.id);
   };
 
   const handleNewClient = () => {
@@ -188,9 +201,8 @@ export default function Home() {
     if (confirm(`Deseja realmente excluir o cliente "${client.name}"?`)) {
       try {
         await deleteClientRecord(client.id);
-        if (selectedDetailClient?.id === client.id) {
-          setIsClientDetailModalOpen(false);
-          setSelectedDetailClient(null);
+        if (selectedDetailClientId === client.id) {
+          setSelectedDetailClientId(null);
         }
         await loadData();
       } catch (err: any) {
@@ -219,7 +231,12 @@ export default function Home() {
   // Filtro na lista
   const filteredDocs = documents.filter((doc) => {
     const matchesTab = activeTab === 'TODOS' || doc.document_type === activeTab;
-    const matchesStatus = statusFilter === 'TODOS' || doc.status === statusFilter;
+    const matchesStatus =
+      statusFilter === 'TODOS'
+        ? true
+        : statusFilter === 'APROVADO'
+        ? doc.status === 'APROVADO' && !hasLinkedPaidReceipt(doc, documents)
+        : doc.status === statusFilter;
     const s = searchTerm.toLowerCase();
     const matchesSearch =
       !searchTerm ||
@@ -229,14 +246,19 @@ export default function Home() {
     return matchesTab && matchesStatus && matchesSearch;
   });
 
-  // Métricas financeiras calculadas dinamicamente
-  const docsPago = documents.filter((d) => d.status === 'PAGO');
-  const docsAprovado = documents.filter((d) => d.status === 'APROVADO');
-  const docsPendente = documents.filter((d) => d.status === 'PENDENTE');
+  // Métricas financeiras calculadas dinamicamente (sem dupla contagem de orçamentos já quitados)
+  const {
+    docsPago,
+    docsAprovadoPendentes,
+    docsPendente,
+    totalPago,
+    totalAprovado,
+    totalPendente,
+  } = calculateFinancialSummary(documents, documents);
 
-  const totalPago = docsPago.reduce((acc, curr) => acc + Number(curr.total_amount || 0), 0);
-  const totalAprovado = docsAprovado.reduce((acc, curr) => acc + Number(curr.total_amount || 0), 0);
-  const totalPendente = docsPendente.reduce((acc, curr) => acc + Number(curr.total_amount || 0), 0);
+  const selectedDetailClient = selectedDetailClientId
+    ? clients.find((c) => c.id === selectedDetailClientId) || null
+    : null;
 
   // Tela de carregamento enquanto valida login
   if (!authChecked && isLoading) {
@@ -277,21 +299,8 @@ export default function Home() {
           </p>
         </div>
 
-        {/* Botão de Clientes & Logout */}
+        {/* Sair do Sistema */}
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setMainView('CLIENTES')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors shadow-sm ${
-              mainView === 'CLIENTES'
-                ? 'text-white bg-avi-green'
-                : 'text-avi-green bg-emerald-50 hover:bg-emerald-100'
-            }`}
-          >
-            <Users className="w-3.5 h-3.5" />
-            <span>Clientes ({clients.length})</span>
-          </button>
-
           <button
             type="button"
             onClick={handleLogout}
@@ -308,6 +317,7 @@ export default function Home() {
         <button
           type="button"
           onClick={() => {
+            setClientForNewDoc(null);
             setDocToEdit(null);
             setIsOrcamentoModalOpen(true);
           }}
@@ -323,6 +333,7 @@ export default function Home() {
         <button
           type="button"
           onClick={() => {
+            setClientForNewDoc(null);
             setDocToEdit(null);
             setIsReciboModalOpen(true);
           }}
@@ -353,7 +364,10 @@ export default function Home() {
 
         <button
           type="button"
-          onClick={() => setMainView('CLIENTES')}
+          onClick={() => {
+            setMainView('CLIENTES');
+            setSelectedDetailClientId(null);
+          }}
           className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all ${
             mainView === 'CLIENTES'
               ? 'bg-white text-gray-900 shadow-sm'
@@ -365,17 +379,48 @@ export default function Home() {
         </button>
       </div>
 
-      {/* Visão de Clientes vs Visão de Documentos */}
+      {/* Visão de Clientes (Lista ou Ficha 360° Interna) vs Visão de Documentos */}
       {mainView === 'CLIENTES' ? (
-        <ClientsManagerView
-          clients={clients}
-          documents={documents}
-          onOpenClientDetail={handleOpenClientDetail}
-          onNewClient={handleNewClient}
-          onEditClient={handleEditClient}
-          onDeleteClient={handleDeleteClient}
-          onNewOrcamento={handleNewOrcamentoForClient}
-        />
+        selectedDetailClient ? (
+          <ClientDetailView
+            client={selectedDetailClient}
+            documents={documents}
+            approvingId={approvingDocId}
+            onBack={() => setSelectedDetailClientId(null)}
+            onEditClient={handleEditClient}
+            onDeleteClient={handleDeleteClient}
+            onNewOrcamento={handleNewOrcamentoForClient}
+            onNewRecibo={handleNewReciboForClient}
+            onApproveDoc={handleApproveDoc}
+            onConvertDoc={(doc) => {
+              setDocToConvert(doc);
+              setIsConvertModalOpen(true);
+            }}
+            onOpenPDF={(doc) => {
+              setSelectedPDFDoc(doc);
+              setIsPDFModalOpen(true);
+            }}
+            onEditDoc={(doc) => {
+              setDocToEdit(doc);
+              if (doc.document_type === 'ORCAMENTO') {
+                setIsOrcamentoModalOpen(true);
+              } else {
+                setIsReciboModalOpen(true);
+              }
+            }}
+            onDeleteDoc={handleDeleteDoc}
+          />
+        ) : (
+          <ClientsManagerView
+            clients={clients}
+            documents={documents}
+            onOpenClientDetail={handleOpenClientDetail}
+            onNewClient={handleNewClient}
+            onEditClient={handleEditClient}
+            onDeleteClient={handleDeleteClient}
+            onNewOrcamento={handleNewOrcamentoForClient}
+          />
+        )
       ) : (
         <>
           {/* Cards de Métricas Reais do Banco - Proposta 1 (3 cards interativos) */}
@@ -457,7 +502,7 @@ export default function Home() {
             </div>
             <div className="flex items-center justify-between mt-1">
               <p className="text-[10px] sm:text-[11px] text-gray-500 truncate">
-                {docsAprovado.length} {docsAprovado.length === 1 ? 'a executar' : 'a executar'}
+                {docsAprovadoPendentes.length} a executar
               </p>
               {statusFilter === 'APROVADO' && (
                 <span className="hidden sm:inline-block text-[9px] font-bold text-blue-700 bg-blue-100 px-1 rounded shrink-0">
@@ -479,7 +524,7 @@ export default function Home() {
             }`}
           >
             <div className="flex items-center justify-between text-gray-500 text-[11px] sm:text-xs mb-1">
-              <span className="font-semibold text-amber-800 truncate">Aguardando</span>
+              <span className="font-semibold text-amber-800 truncate">Aguardando confirmação</span>
               <Clock className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${
                 statusFilter === 'PENDENTE' ? 'text-amber-600' : 'text-amber-500'
               }`} />
@@ -610,136 +655,33 @@ export default function Home() {
           </div>
         ) : (
           <div className="space-y-3">
-            {filteredDocs.map((doc) => {
-              const isOrcamento = doc.document_type === 'ORCAMENTO';
-
-              return (
-                <div
-                  key={doc.id}
-                  className="p-3.5 sm:p-4 rounded-2xl border border-gray-100 hover:border-gray-200 hover:bg-gray-50/70 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                >
-                  {/* Lado Esquerdo: Identificação & Detalhes */}
-                  <div className="flex items-start gap-3 min-w-0">
-                    <div
-                      className={`h-10 w-10 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
-                        isOrcamento
-                          ? 'bg-emerald-50 text-avi-green'
-                          : 'bg-orange-50 text-avi-orange'
-                      }`}
-                    >
-                      {isOrcamento ? 'ORC' : 'REC'}
-                    </div>
-
-                    <div className="space-y-1 min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-bold text-sm text-gray-900 truncate">
-                          {doc.client?.name || 'Cliente'}
-                        </span>
-
-                        {/* Status Badge */}
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${
-                            doc.status === 'PAGO'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : doc.status === 'APROVADO'
-                              ? 'bg-blue-100 text-blue-800'
-                              : doc.status === 'RECUSADO'
-                              ? 'bg-red-100 text-red-800'
-                              : 'bg-amber-100 text-amber-800'
-                          }`}
-                        >
-                          {doc.status}
-                          {doc.payment_method ? ` (${doc.payment_method})` : ''}
-                        </span>
-
-                        <span className="text-[11px] font-semibold text-gray-400 shrink-0">
-                          {doc.code}
-                        </span>
-                      </div>
-
-                      <p className="text-xs text-gray-500 truncate">
-                        {doc.items && doc.items.length > 0
-                          ? doc.items[0].title
-                          : doc.notes || 'Sem descrição'}
-                        {doc.location ? ` • ${doc.location}` : ''}
-                      </p>
-
-                      <p className="text-[11px] text-gray-400">
-                        Emitido em: {formatDate(doc.issue_date)}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Lado Direito: Valor & Ações */}
-                  <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100 shrink-0">
-                    <div className="text-left sm:text-right">
-                      <span className="block font-bold text-sm text-gray-900">
-                        {formatCurrency(doc.total_amount)}
-                      </span>
-                    </div>
-
-                    {/* Botões de Ação */}
-                    <div className="flex items-center gap-1.5">
-                      {/* Botão Pulo do Gato: Converter Orçamento em Recibo */}
-                      {isOrcamento && doc.status !== 'RECUSADO' && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setDocToConvert(doc);
-                            setIsConvertModalOpen(true);
-                          }}
-                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100 text-avi-orange font-semibold text-xs transition-colors"
-                          title="Converter Orçamento em Recibo Quitado"
-                        >
-                          <ArrowRightLeft className="w-3.5 h-3.5" />
-                          <span className="hidden sm:inline">Gerar Recibo</span>
-                        </button>
-                      )}
-
-                      {/* Visualizar PDF */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedPDFDoc(doc);
-                          setIsPDFModalOpen(true);
-                        }}
-                        className="p-2 rounded-xl text-gray-600 hover:text-avi-green hover:bg-white border border-gray-200 transition-colors"
-                        title="Visualizar e Enviar PDF no WhatsApp"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-
-                      {/* Editar */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDocToEdit(doc);
-                          if (isOrcamento) {
-                            setIsOrcamentoModalOpen(true);
-                          } else {
-                            setIsReciboModalOpen(true);
-                          }
-                        }}
-                        className="p-2 rounded-xl text-gray-600 hover:text-blue-600 hover:bg-white border border-gray-200 transition-colors"
-                        title="Editar Documento"
-                      >
-                        <Edit3 className="w-4 h-4" />
-                      </button>
-
-                      {/* Excluir */}
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteDoc(doc.id, doc.code)}
-                        className="p-2 rounded-xl text-gray-400 hover:text-red-600 hover:bg-white border border-gray-200 transition-colors"
-                        title="Excluir"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+            {filteredDocs.map((doc) => (
+              <DocumentCard
+                key={doc.id}
+                doc={doc}
+                allDocuments={documents}
+                showClientName={true}
+                approvingId={approvingDocId}
+                onApprove={handleApproveDoc}
+                onConvert={(d) => {
+                  setDocToConvert(d);
+                  setIsConvertModalOpen(true);
+                }}
+                onOpenPDF={(d) => {
+                  setSelectedPDFDoc(d);
+                  setIsPDFModalOpen(true);
+                }}
+                onEdit={(d) => {
+                  setDocToEdit(d);
+                  if (d.document_type === 'ORCAMENTO') {
+                    setIsOrcamentoModalOpen(true);
+                  } else {
+                    setIsReciboModalOpen(true);
+                  }
+                }}
+                onDelete={handleDeleteDoc}
+              />
+            ))}
           </div>
         )}
       </section>
@@ -800,40 +742,7 @@ export default function Home() {
         }}
       />
 
-      {/* 5. Modal de Detalhes 360° do Cliente */}
-      <ClientDetailModal
-        isOpen={isClientDetailModalOpen}
-        onClose={() => {
-          setIsClientDetailModalOpen(false);
-          setSelectedDetailClient(null);
-        }}
-        client={clients.find((c) => c.id === selectedDetailClient?.id) || selectedDetailClient}
-        documents={documents}
-        profile={profile}
-        onEditClient={handleEditClient}
-        onDeleteClient={handleDeleteClient}
-        onNewOrcamento={handleNewOrcamentoForClient}
-        onNewRecibo={handleNewReciboForClient}
-        onOpenPDF={(doc) => {
-          setSelectedPDFDoc(doc);
-          setIsPDFModalOpen(true);
-        }}
-        onEditDoc={(doc) => {
-          setDocToEdit(doc);
-          if (doc.document_type === 'ORCAMENTO') {
-            setIsOrcamentoModalOpen(true);
-          } else {
-            setIsReciboModalOpen(true);
-          }
-        }}
-        onConvertDoc={(doc) => {
-          setDocToConvert(doc);
-          setIsConvertModalOpen(true);
-        }}
-        onDeleteDoc={handleDeleteDoc}
-      />
-
-      {/* 6. Modal de Visualização & WhatsApp do PDF */}
+      {/* 5. Modal de Visualização & WhatsApp do PDF */}
       {selectedPDFDoc && (
         <PDFPreviewModal
           isOpen={isPDFModalOpen}

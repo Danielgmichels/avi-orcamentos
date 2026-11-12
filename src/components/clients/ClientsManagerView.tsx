@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react';
 import { Client, Document as DocumentType } from '@/types/database';
-import { formatCurrency, formatPhone } from '@/utils/formatters';
+import { formatCurrency, formatPhone, getWhatsAppUrl } from '@/utils/formatters';
+import { calculateFinancialSummary } from '@/utils/documentStats';
 import {
   Users,
   Search,
@@ -14,11 +15,6 @@ import {
   Eye,
   Edit3,
   Trash2,
-  CheckCircle2,
-  FileCheck,
-  Clock,
-  TrendingUp,
-  FileSpreadsheet,
 } from 'lucide-react';
 
 interface ClientsManagerViewProps {
@@ -81,10 +77,10 @@ export const ClientsManagerView: React.FC<ClientsManagerViewProps> = ({
           <button
             type="button"
             onClick={onNewClient}
-            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold text-white bg-avi-green hover:bg-avi-green-light active:scale-95 shadow-sm transition-all shrink-0"
+            className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold text-white bg-avi-green hover:bg-avi-green-light active:scale-95 shadow-sm transition-all shrink-0"
           >
             <Plus className="w-4 h-4" />
-            <span>+ Novo Cliente</span>
+            <span>Novo Cliente</span>
           </button>
         </div>
 
@@ -117,31 +113,27 @@ export const ClientsManagerView: React.FC<ClientsManagerViewProps> = ({
           <p className="text-xs text-gray-400 mt-1 max-w-xs mx-auto">
             {searchTerm
               ? 'Nenhum resultado corresponde à sua pesquisa.'
-              : 'Cadastre o seu primeiro cliente clicando no botão "+ Novo Cliente".'}
+              : 'Cadastre o seu primeiro cliente clicando no botão "Novo Cliente".'}
           </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
           {filteredClients.map((client) => {
-            // Documentos deste cliente
+            // Documentos e métricas financeiras deste cliente
             const clientDocs = documents.filter((d) => d.client_id === client.id);
+            const {
+              docsPago,
+              docsAprovadoPendentes,
+              docsPendente,
+              totalPago,
+              totalAprovado,
+              totalPendente,
+            } = calculateFinancialSummary(clientDocs, documents);
 
-            const docsPago = clientDocs.filter((d) => d.status === 'PAGO');
-            const docsAprovado = clientDocs.filter((d) => d.status === 'APROVADO');
-            const docsPendente = clientDocs.filter((d) => d.status === 'PENDENTE');
-
-            const totalPago = docsPago.reduce((acc, curr) => acc + Number(curr.total_amount || 0), 0);
-            const totalAprovado = docsAprovado.reduce((acc, curr) => acc + Number(curr.total_amount || 0), 0);
-            const totalPendente = docsPendente.reduce((acc, curr) => acc + Number(curr.total_amount || 0), 0);
-
-            // WhatsApp link
-            const phoneDigits = client.phone ? client.phone.replace(/\D/g, '') : '';
-            const waNumber = phoneDigits.startsWith('55') ? phoneDigits : `55${phoneDigits}`;
-            const whatsappUrl = phoneDigits
-              ? `https://wa.me/${waNumber}?text=${encodeURIComponent(
-                  `Olá ${client.name}, tudo bem? Aqui é o Lucas da AVI Alumínios e Vidros.`
-                )}`
-              : null;
+            const whatsappUrl = getWhatsAppUrl(
+              client.phone,
+              `Olá ${client.name}, tudo bem? Aqui é o Lucas da AVI Alumínios e Vidros.`
+            );
 
             return (
               <div
@@ -151,19 +143,23 @@ export const ClientsManagerView: React.FC<ClientsManagerViewProps> = ({
                 {/* Topo do Card */}
                 <div className="space-y-2">
                   <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="h-10 w-10 rounded-2xl bg-emerald-50 text-avi-green font-black text-sm flex items-center justify-center shrink-0 border border-emerald-100">
+                    <button
+                      type="button"
+                      onClick={() => onOpenClientDetail(client)}
+                      className="flex items-center gap-2.5 min-w-0 text-left group/title"
+                    >
+                      <div className="h-10 w-10 rounded-2xl bg-emerald-50 text-avi-green font-black text-sm flex items-center justify-center shrink-0 border border-emerald-100 group-hover/title:bg-avi-green group-hover/title:text-emerald-300 transition-colors">
                         {client.name.charAt(0).toUpperCase()}
                       </div>
                       <div className="min-w-0">
-                        <h3 className="font-bold text-sm sm:text-base text-gray-900 truncate">
+                        <h3 className="font-bold text-sm sm:text-base text-gray-900 group-hover/title:text-avi-green truncate transition-colors">
                           {client.name}
                         </h3>
                         <span className="text-[11px] text-gray-400">
                           {clientDocs.length} {clientDocs.length === 1 ? 'documento' : 'documentos'}
                         </span>
                       </div>
-                    </div>
+                    </button>
 
                     {/* Ações Rápidas: Editar e Excluir */}
                     <div className="flex items-center gap-1 shrink-0">
@@ -237,7 +233,7 @@ export const ClientsManagerView: React.FC<ClientsManagerViewProps> = ({
                     <span className="text-xs font-bold text-blue-700 truncate block">
                       {formatCurrency(totalAprovado)}
                     </span>
-                    <span className="text-[9px] text-gray-400">({docsAprovado.length})</span>
+                    <span className="text-[9px] text-gray-400">({docsAprovadoPendentes.length})</span>
                   </div>
 
                   <div className="truncate">
