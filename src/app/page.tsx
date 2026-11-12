@@ -8,15 +8,11 @@ import {
   FileText, 
   Receipt, 
   Users, 
-  Clock, 
   Search, 
   FileSpreadsheet, 
   LogOut, 
   AlertCircle,
   Loader2,
-  CheckCircle2,
-  FileCheck,
-  X
 } from 'lucide-react';
 import { Document as DocumentType, Client, Profile } from '@/types/database';
 import {
@@ -26,8 +22,11 @@ import {
 } from '@/lib/services/documents';
 import { getClients, deleteClientRecord } from '@/lib/services/clients';
 import { getCurrentProfile } from '@/lib/services/profile';
-import { formatCurrency } from '@/utils/formatters';
-import { calculateFinancialSummary, hasLinkedPaidReceipt } from '@/utils/documentStats';
+import {
+  calculateFinancialSummary,
+  filterDocuments,
+  StatusFilterValue,
+} from '@/utils/documentStats';
 import { exportDocumentsToExcel } from '@/utils/exportExcel';
 
 // Componentes e Modais
@@ -35,6 +34,10 @@ import { OrcamentoModal } from '@/components/documents/OrcamentoModal';
 import { ReciboModal } from '@/components/documents/ReciboModal';
 import { ConvertModal } from '@/components/documents/ConvertModal';
 import { DocumentCard } from '@/components/documents/DocumentCard';
+import {
+  FinancialSummaryCards,
+  StatusFilterBanner,
+} from '@/components/documents/FinancialSummaryCards';
 import { ClientModal } from '@/components/clients/ClientModal';
 import { ClientsManagerView } from '@/components/clients/ClientsManagerView';
 import { ClientDetailView } from '@/components/clients/ClientDetailView';
@@ -63,7 +66,7 @@ export default function Home() {
 
   // Filtros e busca de documentos
   const [activeTab, setActiveTab] = useState<'TODOS' | 'ORCAMENTO' | 'RECIBO'>('TODOS');
-  const [statusFilter, setStatusFilter] = useState<'TODOS' | 'PAGO' | 'APROVADO' | 'PENDENTE'>('TODOS');
+  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>('TODOS');
   const [searchTerm, setSearchTerm] = useState('');
 
   // Modais de Controle
@@ -229,32 +232,14 @@ export default function Home() {
   };
 
   // Filtro na lista
-  const filteredDocs = documents.filter((doc) => {
-    const matchesTab = activeTab === 'TODOS' || doc.document_type === activeTab;
-    const matchesStatus =
-      statusFilter === 'TODOS'
-        ? true
-        : statusFilter === 'APROVADO'
-        ? doc.status === 'APROVADO' && !hasLinkedPaidReceipt(doc, documents)
-        : doc.status === statusFilter;
-    const s = searchTerm.toLowerCase();
-    const matchesSearch =
-      !searchTerm ||
-      doc.code.toLowerCase().includes(s) ||
-      doc.client?.name?.toLowerCase().includes(s) ||
-      doc.location?.toLowerCase().includes(s);
-    return matchesTab && matchesStatus && matchesSearch;
+  const filteredDocs = filterDocuments(documents, documents, {
+    tab: activeTab,
+    statusFilter,
+    searchTerm,
   });
 
   // Métricas financeiras calculadas dinamicamente (sem dupla contagem de orçamentos já quitados)
-  const {
-    docsPago,
-    docsAprovadoPendentes,
-    docsPendente,
-    totalPago,
-    totalAprovado,
-    totalPendente,
-  } = calculateFinancialSummary(documents, documents);
+  const financialSummary = calculateFinancialSummary(documents, documents);
 
   const selectedDetailClient = selectedDetailClientId
     ? clients.find((c) => c.id === selectedDetailClientId) || null
@@ -447,103 +432,11 @@ export default function Home() {
           </button>
         </div>
 
-        <div className="grid grid-cols-3 gap-2 sm:gap-3">
-          {/* Card 1: Recebido / Quitado */}
-          <button
-            type="button"
-            onClick={() => handleToggleStatusFilter('PAGO')}
-            title="Filtrar por orçamentos/recibos quitados"
-            className={`p-2.5 sm:p-4 rounded-2xl border text-left transition-all relative overflow-hidden group active:scale-[0.98] ${
-              statusFilter === 'PAGO'
-                ? 'bg-emerald-50/80 border-emerald-500 ring-2 ring-emerald-500 shadow-sm'
-                : 'bg-white border-gray-200 hover:border-emerald-300 hover:shadow-sm'
-            }`}
-          >
-            <div className="flex items-center justify-between text-gray-500 text-[11px] sm:text-xs mb-1">
-              <span className="font-semibold text-emerald-800 truncate">Recebido</span>
-              <CheckCircle2 className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${
-                statusFilter === 'PAGO' ? 'text-emerald-600' : 'text-emerald-500'
-              }`} />
-            </div>
-            <div className="text-xs sm:text-lg md:text-xl font-black text-gray-900 truncate" title={formatCurrency(totalPago)}>
-              {formatCurrency(totalPago)}
-            </div>
-            <div className="flex items-center justify-between mt-1">
-              <p className="text-[10px] sm:text-[11px] text-gray-500 truncate">
-                {docsPago.length} {docsPago.length === 1 ? 'quitado' : 'quitados'}
-              </p>
-              {statusFilter === 'PAGO' && (
-                <span className="hidden sm:inline-block text-[9px] font-bold text-emerald-700 bg-emerald-100 px-1 rounded shrink-0">
-                  Filtrado
-                </span>
-              )}
-            </div>
-          </button>
-
-          {/* Card 2: Orçamentos Aprovados */}
-          <button
-            type="button"
-            onClick={() => handleToggleStatusFilter('APROVADO')}
-            title="Filtrar por orçamentos aprovados (a executar)"
-            className={`p-2.5 sm:p-4 rounded-2xl border text-left transition-all relative overflow-hidden group active:scale-[0.98] ${
-              statusFilter === 'APROVADO'
-                ? 'bg-blue-50/80 border-blue-500 ring-2 ring-blue-500 shadow-sm'
-                : 'bg-white border-gray-200 hover:border-blue-300 hover:shadow-sm'
-            }`}
-          >
-            <div className="flex items-center justify-between text-gray-500 text-[11px] sm:text-xs mb-1">
-              <span className="font-semibold text-blue-800 truncate">Aprovados</span>
-              <FileCheck className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${
-                statusFilter === 'APROVADO' ? 'text-blue-600' : 'text-blue-500'
-              }`} />
-            </div>
-            <div className="text-xs sm:text-lg md:text-xl font-black text-blue-700 truncate" title={formatCurrency(totalAprovado)}>
-              {formatCurrency(totalAprovado)}
-            </div>
-            <div className="flex items-center justify-between mt-1">
-              <p className="text-[10px] sm:text-[11px] text-gray-500 truncate">
-                {docsAprovadoPendentes.length} a executar
-              </p>
-              {statusFilter === 'APROVADO' && (
-                <span className="hidden sm:inline-block text-[9px] font-bold text-blue-700 bg-blue-100 px-1 rounded shrink-0">
-                  Filtrado
-                </span>
-              )}
-            </div>
-          </button>
-
-          {/* Card 3: Aguardando Confirmação */}
-          <button
-            type="button"
-            onClick={() => handleToggleStatusFilter('PENDENTE')}
-            title="Filtrar por propostas pendentes em análise"
-            className={`p-2.5 sm:p-4 rounded-2xl border text-left transition-all relative overflow-hidden group active:scale-[0.98] ${
-              statusFilter === 'PENDENTE'
-                ? 'bg-amber-50/80 border-amber-500 ring-2 ring-amber-500 shadow-sm'
-                : 'bg-white border-gray-200 hover:border-amber-300 hover:shadow-sm'
-            }`}
-          >
-            <div className="flex items-center justify-between text-gray-500 text-[11px] sm:text-xs mb-1">
-              <span className="font-semibold text-amber-800 truncate">Aguardando confirmação</span>
-              <Clock className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${
-                statusFilter === 'PENDENTE' ? 'text-amber-600' : 'text-amber-500'
-              }`} />
-            </div>
-            <div className="text-xs sm:text-lg md:text-xl font-black text-amber-600 truncate" title={formatCurrency(totalPendente)}>
-              {formatCurrency(totalPendente)}
-            </div>
-            <div className="flex items-center justify-between mt-1">
-              <p className="text-[10px] sm:text-[11px] text-gray-500 truncate">
-                {docsPendente.length} {docsPendente.length === 1 ? 'em análise' : 'em análise'}
-              </p>
-              {statusFilter === 'PENDENTE' && (
-                <span className="hidden sm:inline-block text-[9px] font-bold text-amber-700 bg-amber-100 px-1 rounded shrink-0">
-                  Filtrado
-                </span>
-              )}
-            </div>
-          </button>
-        </div>
+        <FinancialSummaryCards
+          summary={financialSummary}
+          statusFilter={statusFilter}
+          onToggleStatusFilter={handleToggleStatusFilter}
+        />
       </section>
 
       {/* Histórico e Gestão de Documentos */}
@@ -603,39 +496,11 @@ export default function Home() {
         </div>
 
         {/* Aviso de Filtro Ativo por Status */}
-        {statusFilter !== 'TODOS' && (
-          <div className="flex items-center justify-between bg-gray-50 border border-gray-200 px-3 py-2 rounded-xl text-xs">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-gray-500">Filtrando por status:</span>
-              <span
-                className={`font-bold px-2 py-0.5 rounded-full text-[10px] ${
-                  statusFilter === 'PAGO'
-                    ? 'bg-emerald-100 text-emerald-800'
-                    : statusFilter === 'APROVADO'
-                    ? 'bg-blue-100 text-blue-800'
-                    : 'bg-amber-100 text-amber-800'
-                }`}
-              >
-                {statusFilter === 'PAGO'
-                  ? 'RECEBIDO / PAGO'
-                  : statusFilter === 'APROVADO'
-                  ? 'APROVADO'
-                  : 'AGUARDANDO CONFIRMAÇÃO'}
-              </span>
-              <span className="text-gray-400">
-                ({filteredDocs.length} {filteredDocs.length === 1 ? 'encontrado' : 'encontrados'})
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setStatusFilter('TODOS')}
-              className="flex items-center gap-1 text-[11px] font-semibold text-gray-500 hover:text-red-600 transition-colors shrink-0 ml-2"
-            >
-              <X className="w-3.5 h-3.5" />
-              <span>Limpar filtro</span>
-            </button>
-          </div>
-        )}
+        <StatusFilterBanner
+          statusFilter={statusFilter}
+          resultCount={filteredDocs.length}
+          onClear={() => setStatusFilter('TODOS')}
+        />
 
         {/* Lista de Documentos */}
         {isLoading ? (

@@ -82,3 +82,39 @@ export function calculateFinancialSummary(
     totalPendente: sumAmount(docsPendente),
   };
 }
+
+export type StatusFilterValue = 'TODOS' | 'PAGO' | 'APROVADO' | 'PENDENTE';
+
+/**
+ * Filtra uma lista de documentos por aba (tipo), card financeiro (status) e busca textual.
+ */
+export function filterDocuments(
+  subsetDocs: DocumentType[],
+  allDocuments: DocumentType[],
+  options: {
+    tab: 'TODOS' | 'ORCAMENTO' | 'RECIBO';
+    statusFilter: StatusFilterValue;
+    searchTerm: string;
+  }
+): DocumentType[] {
+  const s = options.searchTerm.trim().toLowerCase();
+
+  return subsetDocs.filter((doc) => {
+    const matchesTab = options.tab === 'TODOS' || doc.document_type === options.tab;
+    const matchesStatus =
+      options.statusFilter === 'TODOS'
+        ? true
+        : options.statusFilter === 'APROVADO'
+        ? doc.status === 'APROVADO' && !hasLinkedPaidReceipt(doc, allDocuments)
+        : doc.status === options.statusFilter;
+    const matchesSearch =
+      !s ||
+      doc.code.toLowerCase().includes(s) ||
+      doc.client?.name?.toLowerCase().includes(s) ||
+      doc.location?.toLowerCase().includes(s) ||
+      (doc.items && doc.items.some((i) => i.title.toLowerCase().includes(s))) ||
+      doc.notes?.toLowerCase().includes(s);
+
+    return matchesTab && matchesStatus && matchesSearch;
+  });
+}

@@ -2,9 +2,17 @@
 
 import React, { useState } from 'react';
 import { Client, Document as DocumentType } from '@/types/database';
-import { formatCurrency, formatPhone, getWhatsAppUrl } from '@/utils/formatters';
-import { calculateFinancialSummary } from '@/utils/documentStats';
+import { formatPhone, getWhatsAppUrl } from '@/utils/formatters';
+import {
+  calculateFinancialSummary,
+  filterDocuments,
+  StatusFilterValue,
+} from '@/utils/documentStats';
 import { DocumentCard } from '@/components/documents/DocumentCard';
+import {
+  FinancialSummaryCards,
+  StatusFilterBanner,
+} from '@/components/documents/FinancialSummaryCards';
 import {
   ArrowLeft,
   Phone,
@@ -16,9 +24,6 @@ import {
   Trash2,
   Plus,
   Search,
-  CheckCircle2,
-  FileCheck,
-  Clock,
 } from 'lucide-react';
 
 interface ClientDetailViewProps {
@@ -53,35 +58,24 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
   onDeleteDoc,
 }) => {
   const [docTab, setDocTab] = useState<'TODOS' | 'ORCAMENTO' | 'RECIBO'>('TODOS');
+  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>('TODOS');
   const [docSearch, setDocSearch] = useState('');
 
   // Documentos deste cliente
   const clientDocs = documents.filter((d) => d.client_id === client.id);
-  const orcamentosClient = clientDocs.filter((d) => d.document_type === 'ORCAMENTO');
 
   // Resumo financeiro evitando dupla contagem de orçamentos já pagos via recibo
-  const {
-    docsPago,
-    docsAprovadoPendentes,
-    docsAprovadoTotal,
-    docsPendente,
-    docsRecusado,
-    totalPago,
-    totalAprovado,
-    totalPendente,
-  } = calculateFinancialSummary(clientDocs, documents);
+  const financialSummary = calculateFinancialSummary(clientDocs, documents);
+
+  const handleToggleStatusFilter = (status: 'PAGO' | 'APROVADO' | 'PENDENTE') => {
+    setStatusFilter((prev) => (prev === status ? 'TODOS' : status));
+  };
 
   // Filtragem na lista de documentos do cliente
-  const filteredDocs = clientDocs.filter((doc) => {
-    const matchesTab = docTab === 'TODOS' || doc.document_type === docTab;
-    const s = docSearch.toLowerCase();
-    const matchesSearch =
-      !docSearch ||
-      doc.code.toLowerCase().includes(s) ||
-      doc.location?.toLowerCase().includes(s) ||
-      (doc.items && doc.items.some((i) => i.title.toLowerCase().includes(s))) ||
-      doc.notes?.toLowerCase().includes(s);
-    return matchesTab && matchesSearch;
+  const filteredDocs = filterDocuments(clientDocs, documents, {
+    tab: docTab,
+    statusFilter,
+    searchTerm: docSearch,
   });
 
   const whatsappUrl = getWhatsAppUrl(
@@ -199,88 +193,24 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
           </button>
         </div>
 
-        {/* Cards de Resumo Financeiro do Cliente */}
-        <div className="space-y-2 pt-2 border-t border-gray-100">
-          <h3 className="text-xs font-bold text-gray-600 uppercase tracking-wider">
-            Resumo Financeiro deste Cliente
-          </h3>
-
-          <div className="grid grid-cols-3 gap-2">
-            {/* Recebido */}
-            <div className="p-2.5 sm:p-3 bg-emerald-50/70 border border-emerald-200 rounded-2xl">
-              <div className="flex items-center justify-between text-[11px] font-semibold text-emerald-800 mb-1">
-                <span className="truncate">Recebido</span>
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              </div>
-              <div
-                className="text-xs sm:text-base font-extrabold text-gray-900 truncate"
-                title={formatCurrency(totalPago)}
-              >
-                {formatCurrency(totalPago)}
-              </div>
-              <p className="text-[10px] text-gray-500 mt-0.5 truncate">
-                {docsPago.length} {docsPago.length === 1 ? 'quitado' : 'quitados'}
-              </p>
-            </div>
-
-            {/* Aprovados a executar */}
-            <div className="p-2.5 sm:p-3 bg-blue-50/70 border border-blue-200 rounded-2xl">
-              <div className="flex items-center justify-between text-[11px] font-semibold text-blue-800 mb-1">
-                <span className="truncate">Aprovados</span>
-                <FileCheck className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-              </div>
-              <div
-                className="text-xs sm:text-base font-extrabold text-blue-700 truncate"
-                title={formatCurrency(totalAprovado)}
-              >
-                {formatCurrency(totalAprovado)}
-              </div>
-              <p className="text-[10px] text-gray-500 mt-0.5 truncate">
-                {docsAprovadoPendentes.length} a executar
-              </p>
-            </div>
-
-            {/* Aguardando */}
-            <div className="p-2.5 sm:p-3 bg-amber-50/70 border border-amber-200 rounded-2xl">
-              <div className="flex items-center justify-between text-[11px] font-semibold text-amber-800 mb-1">
-                <span className="truncate">Aguardando</span>
-                <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-              </div>
-              <div
-                className="text-xs sm:text-base font-extrabold text-amber-600 truncate"
-                title={formatCurrency(totalPendente)}
-              >
-                {formatCurrency(totalPendente)}
-              </div>
-              <p className="text-[10px] text-gray-500 mt-0.5 truncate">
-                {docsPendente.length} em análise
-              </p>
-            </div>
+        {/* Cards de Resumo Financeiro do Cliente (interativos para filtrar) */}
+        <div className="space-y-2.5 pt-2 border-t border-gray-100">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-bold text-gray-600 uppercase tracking-wider">
+              Resumo Financeiro deste Cliente
+            </h3>
+            {statusFilter !== 'TODOS' && (
+              <span className="hidden sm:inline text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                Filtro ativo: {statusFilter}
+              </span>
+            )}
           </div>
 
-          {/* Estatística de Orçamentos (Aprovações e Recusados) */}
-          {orcamentosClient.length > 0 && (
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 bg-gray-50 rounded-xl text-[11px] text-gray-600 border border-gray-100">
-              <span>
-                <strong>{orcamentosClient.length}</strong>{' '}
-                {orcamentosClient.length === 1 ? 'orçamento emitido' : 'orçamentos emitidos'}
-              </span>
-              <span className="text-gray-300">•</span>
-              <span className="text-blue-700 font-medium">
-                {docsAprovadoTotal.length}{' '}
-                {docsAprovadoTotal.length === 1 ? 'aprovado' : 'aprovados'} no histórico
-              </span>
-              {docsRecusado.length > 0 && (
-                <>
-                  <span className="text-gray-300">•</span>
-                  <span className="text-red-600 font-medium">
-                    {docsRecusado.length}{' '}
-                    {docsRecusado.length === 1 ? 'recusado' : 'recusados'}
-                  </span>
-                </>
-              )}
-            </div>
-          )}
+          <FinancialSummaryCards
+            summary={financialSummary}
+            statusFilter={statusFilter}
+            onToggleStatusFilter={handleToggleStatusFilter}
+          />
         </div>
       </section>
 
@@ -336,6 +266,12 @@ export const ClientDetailView: React.FC<ClientDetailViewProps> = ({
             />
           </div>
         </div>
+
+        <StatusFilterBanner
+          statusFilter={statusFilter}
+          resultCount={filteredDocs.length}
+          onClear={() => setStatusFilter('TODOS')}
+        />
 
         {filteredDocs.length === 0 ? (
           <div className="text-center py-10 border-2 border-dashed border-gray-100 rounded-2xl text-gray-400">
